@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Flow around a cylinder</title>
+<title>Flow past the Windsible models</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..800&family=Atkinson+Hyperlegible:wght@400;700&display=swap" rel="stylesheet">
@@ -79,8 +79,8 @@ footer{margin-top:2rem; padding:1.5rem 0 3rem; border-top:1px solid var(--line);
 <body>
 <div class="wrap">
 <header>
-  <h1>Flow around a cylinder</h1>
-  <p>Change the flow speed, the cylinder size and the viscosity, and watch how the Reynolds number changes the wake. Compare what you see with the smoke in the Windsible tunnel.</p>
+  <h1>Flow past the Windsible models</h1>
+  <p>Pick a model, change the flow speed, its size and the viscosity, and watch how the Reynolds number changes the wake. Compare what you see with the smoke in the Windsible tunnel.</p>
 </header>
 
 <main>
@@ -103,11 +103,20 @@ footer{margin-top:2rem; padding:1.5rem 0 3rem; border-top:1px solid var(--line);
 
   <div class="panel-grid">
     <div class="ctrl">
+      <div class="seg" role="group" aria-label="Choose a model" style="margin-bottom:1rem">
+        <button class="b" data-shape="cylinder" aria-pressed="true">Circular cylinder</button>
+        <button class="b" data-shape="square" aria-pressed="false">Square prism</button>
+        <button class="b" data-shape="teardrop" aria-pressed="false">Streamlined teardrop</button>
+      </div>
       <label for="uSlider">Flow velocity, U = <strong id="uOut">0.100</strong> <span class="unit">(lattice units)</span></label>
       <input id="uSlider" type="range" min="0.02" max="0.15" step="0.005" value="0.1">
 
-      <label for="dSlider">Characteristic length (cylinder diameter), D = <strong id="dOut">24</strong> <span class="unit">(grid cells)</span></label>
+      <label for="dSlider">Characteristic length (<span id="dName">cylinder diameter</span>), D = <strong id="dOut">24</strong> <span class="unit">(grid cells)</span></label>
       <input id="dSlider" type="range" min="12" max="32" step="1" value="24">
+      <div id="lenRow" hidden>
+        <label for="lSlider">Teardrop length = <strong id="lOut">96</strong> <span class="unit">(grid cells, <span id="lRatio">4.0</span> × width)</span></label>
+        <input id="lSlider" type="range" min="2" max="5" step="0.1" value="4">
+      </div>
 
       <label for="nuSlider">Viscosity, ν = <strong id="nuOut">0.020</strong> <span class="unit">(lattice units)</span></label>
       <input id="nuSlider" type="range" min="-2.301" max="-0.602" step="0.001" value="-1.699">
@@ -124,11 +133,11 @@ footer{margin-top:2rem; padding:1.5rem 0 3rem; border-top:1px solid var(--line);
       </div>
 
       <h3 style="margin-top:1.2rem">Real-world equivalent</h3>
-      <p class="note">This doesn’t change the simulation. It tells you what real speed would give the same Reynolds number for your chosen fluid and cylinder diameter.</p>
+      <p class="note">This doesn’t change the simulation. It tells you what real speed would give the same Reynolds number for your chosen fluid and body width (20 mm on the printed models).</p>
       <div class="fields">
         <div><label for="rweFluid">Fluid</label>
           <select id="rweFluid"><option value="1.5e-5">Air (ν = 1.5×10⁻⁵ m²/s)</option><option value="1.0e-6">Water (ν = 1.0×10⁻⁶ m²/s)</option><option value="1.12e-3">Glycerine (ν = 1.1×10⁻³ m²/s)</option></select></div>
-        <div><label for="rweSize">Diameter (mm)</label><input id="rweSize" type="number" min="0" step="any" value="40" inputmode="decimal"></div>
+        <div><label for="rweSize">Body width (mm)</label><input id="rweSize" type="number" min="0" step="any" value="20" inputmode="decimal"></div>
       </div>
       <div class="rwe-out"><span>Equivalent speed</span><strong id="rweV">–</strong></div>
     </div>
@@ -136,7 +145,7 @@ footer{margin-top:2rem; padding:1.5rem 0 3rem; border-top:1px solid var(--line);
 </main>
 
 <footer>
-  <p>The simulation is a two-dimensional lattice Boltzmann flow solver. Velocity, length and viscosity are in lattice (simulation) units, not m/s, metres or m²/s; only their combination, the Reynolds number, matters for what the flow looks like.</p>
+  <p>The simulation is a two-dimensional lattice Boltzmann flow solver. Velocity, length and viscosity are in lattice (simulation) units, not m/s, metres or m²/s; only their combination, the Reynolds number, matters for what the flow looks like. For every model the characteristic length D is the width facing the flow (20 mm on the printed models), so Reynolds numbers compare like for like. The teardrop uses the profile from the CAD drawing, scaled to the chosen width and length.</p>
 </footer>
 </div>
 
@@ -154,7 +163,7 @@ const OPP=[0,3,4,1,2,7,8,5,6];
 const OFF=CX.map((c,k)=>c+CY[k]*NX);
 let F=[],G=[]; for(let k=0;k<9;k++){F.push(new Float32Array(N)); G.push(new Float32Array(N));}
 const solid=new Uint8Array(N), nearSolid=new Uint8Array(N), UX=new Float32Array(N), UY=new Float32Array(N);
-let U=0.1, NU=0.02, D=24, view="smoke", running=true;
+let U=0.1, NU=0.02, D=24, view="smoke", running=true, shape="cylinder", LR=4;
 const BX=75, BY=NY/2+0.37;
 const Re=()=>U*D/NU;
 
@@ -162,10 +171,27 @@ function setEq(A,idx,r,u,v){
   const usq=1.5*(u*u+v*v);
   for(let k=0;k<9;k++){ const cu=3*(CX[k]*u+CY[k]*v); A[k][idx]=WT[k]*r*(1+cu+0.5*cu*cu-usq); }
 }
+// teardrop half-width profile from the CAD Bézier curves (nose at x=0, 80 long, 20 wide)
+const TD=(()=>{ const pts=[];
+  const bez=(p0,p1,p2,p3,n)=>{ for(let k=0;k<=n;k++){ const t=k/n,a=1-t;
+    pts.push([a*a*a*p0[0]+3*a*a*t*p1[0]+3*a*t*t*p2[0]+t*t*t*p3[0], a*a*a*p0[1]+3*a*a*t*p1[1]+3*a*t*t*p2[1]+t*t*t*p3[1]]); } };
+  bez([0,0],[0,5.523],[8.954,10],[20,10],200); bez([20,10],[40,10],[65,0.3],[80,0.3],400);
+  return pts; })();
+function tdHalf(X){
+  if(X<0||X>80) return -1;
+  for(let k=1;k<TD.length;k++){ if(TD[k][0]>=X){ const a=TD[k-1], b=TD[k], t=(X-a[0])/((b[0]-a[0])||1); return a[1]+(b[1]-a[1])*t; } }
+  return 0.3;
+}
+const rearX=()=> shape==="teardrop" ? BX-D/2+LR*D : BX+D/2;
+function inside(i,j){
+  const dx=i-BX, dy=BY-j, R=D/2;
+  if(shape==="square") return Math.abs(dx)<=R && Math.abs(dy)<=R;
+  if(shape==="teardrop"){ const h=tdHalf((dx+R)/(LR*D)*80); if(h<0) return false; return Math.abs(dy)<=Math.max(h/10*R,0.6); }
+  return dx*dx+dy*dy<=R*R;
+}
 function buildMask(){
-  const R2=(D/2)*(D/2);
   for(let j=0;j<NY;j++) for(let i=0;i<NX;i++){
-    const idx=i+j*NX, dx=i-BX, dy=BY-j, s=(dx*dx+dy*dy<=R2)?1:0;
+    const idx=i+j*NX, s=inside(i,j)?1:0;
     if(s && !solid[idx]) setEq(F,idx,1,0,0);
     if(!s && solid[idx]) setEq(F,idx,1,U*0.3,0);
     solid[idx]=s;
@@ -179,7 +205,7 @@ function initFlow(){
   parts.length=0; kickSteps=1500;
 }
 function kick(){ // small one-sided nudge so the symmetric wake starts shedding promptly
-  const x0=Math.round(BX+D*0.6), x1=Math.round(BX+D*1.4), y0=Math.round(BY-D*0.3), y1=Math.round(BY+D*0.3);
+  const x0=Math.round(rearX()+D*0.1), x1=Math.round(rearX()+D*0.9), y0=Math.round(BY-D*0.3), y1=Math.round(BY+D*0.3);
   for(let j=y0;j<=y1;j++) for(let i=x0;i<=x1;i++){ const idx=i+j*NX; if(solid[idx]) continue; F[2][idx]*=1.004; F[4][idx]*=0.996; }
 }
 function collide(){
@@ -318,13 +344,16 @@ function fmtV(v){
 }
 function update(){
   const re=Re();
-  $("reBig").textContent="Re = "+fmtRe(re);
+  const NAMES={cylinder:["Cylinder","cylinder diameter"],square:["Square prism","side of the square"],teardrop:["Teardrop","teardrop width"]};
+  $("reBig").textContent="Re = "+fmtRe(re)+"  ·  "+NAMES[shape][0];
+  $("dName").textContent=NAMES[shape][1];
+  $("lOut").textContent=Math.round(LR*D); $("lRatio").textContent=LR.toFixed(1);
   $("outRe").textContent=fmtRe(re);
   $("outEq").textContent=`${U.toFixed(3)} × ${D} ÷ ${NU.toFixed(3)} = ${fmtRe(re)}`;
   $("uOut").textContent=U.toFixed(3); $("dOut").textContent=D; $("nuOut").textContent=NU.toFixed(3);
   document.querySelectorAll("[data-nu]").forEach(b=>b.setAttribute("aria-pressed", Math.abs(+b.dataset.nu-NU)<1e-6));
   const nu=+$("rweFluid").value, L=+$("rweSize").value/1000;
-  $("rweV").textContent = L>0 ? fmtV(re*nu/L) : "Enter a diameter";
+  $("rweV").textContent = L>0 ? fmtV(re*nu/L) : "Enter a body width";
 }
 
 /* ---------- controls ---------- */
@@ -335,6 +364,13 @@ $("pauseBtn").addEventListener("click",e=>{ running=!running; e.currentTarget.te
 $("resetBtn").addEventListener("click",()=>initFlow());
 $("uSlider").addEventListener("input",e=>{ U=+e.target.value; update(); });
 $("dSlider").addEventListener("input",e=>{ D=+e.target.value; buildMask(); update(); });
+$("lSlider").addEventListener("input",e=>{ LR=+e.target.value; buildMask(); update(); });
+document.querySelectorAll("[data-shape]").forEach(b=>b.addEventListener("click",()=>{
+  shape=b.dataset.shape;
+  document.querySelectorAll("[data-shape]").forEach(x=>x.setAttribute("aria-pressed",x===b));
+  $("lenRow").hidden = shape!=="teardrop";
+  buildMask(); initFlow(); update();
+}));
 $("nuSlider").addEventListener("input",e=>{ NU=+Math.pow(10,+e.target.value).toFixed(4); update(); });
 document.querySelectorAll("[data-nu]").forEach(b=>b.addEventListener("click",()=>{ NU=+b.dataset.nu; $("nuSlider").value=Math.log10(NU); update(); }));
 ["rweFluid","rweSize"].forEach(i=>$(i).addEventListener("input",update));

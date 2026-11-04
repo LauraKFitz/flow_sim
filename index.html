@@ -107,6 +107,7 @@ footer{margin-top:2rem; padding:1.5rem 0 3rem; border-top:1px solid var(--line);
         <button class="b" data-shape="cylinder" aria-pressed="true">Circular cylinder</button>
         <button class="b" data-shape="square" aria-pressed="false">Square prism</button>
         <button class="b" data-shape="teardrop" aria-pressed="false">Streamlined teardrop</button>
+        <button class="b" data-shape="plate" aria-pressed="false">Flat plate</button>
         <button class="b" data-shape="aerofoil" aria-pressed="false">Aerofoil</button>
       </div>
       <label for="uSlider">Flow velocity, U = <strong id="uOut">0.100</strong> <span class="unit">(lattice units)</span></label>
@@ -117,6 +118,10 @@ footer{margin-top:2rem; padding:1.5rem 0 3rem; border-top:1px solid var(--line);
       <div id="lenRow" hidden>
         <label for="lSlider">Teardrop length = <strong id="lOut">96</strong> <span class="unit">(grid cells, <span id="lRatio">4.0</span> × width)</span></label>
         <input id="lSlider" type="range" min="2" max="5" step="0.1" value="4">
+      </div>
+      <div id="thkRow" hidden>
+        <label for="tSlider">Plate thickness = <strong id="tOut">3</strong> <span class="unit">(grid cells)</span></label>
+        <input id="tSlider" type="range" min="2" max="8" step="1" value="3">
       </div>
       <div id="aoaRow" hidden>
         <label for="aSlider">Angle of attack, α = <strong id="aOut">0°</strong></label>
@@ -175,7 +180,7 @@ const OPP=[0,3,4,1,2,7,8,5,6];
 const OFF=CX.map((c,k)=>c+CY[k]*NX);
 let F=[],G=[]; for(let k=0;k<9;k++){F.push(new Float32Array(N)); G.push(new Float32Array(N));}
 const solid=new Uint8Array(N), nearSolid=new Uint8Array(N), UX=new Float32Array(N), UY=new Float32Array(N);
-let U=0.1, NU=0.02, D=24, view="smoke", running=true, shape="cylinder", LR=4, aoa=0, prof="0012";
+let U=0.1, NU=0.02, D=24, view="smoke", running=true, shape="cylinder", LR=4, aoa=0, prof="0012", TH=3;
 const BX=75, BY=NY/2+0.37;
 const Re=()=>U*D/NU;
 
@@ -194,7 +199,7 @@ function tdHalf(X){
   for(let k=1;k<TD.length;k++){ if(TD[k][0]>=X){ const a=TD[k-1], b=TD[k], t=(X-a[0])/((b[0]-a[0])||1); return a[1]+(b[1]-a[1])*t; } }
   return 0.3;
 }
-const rearX=()=> shape==="teardrop" ? BX-D/2+LR*D : BX+D/2;
+const rearX=()=> shape==="teardrop" ? BX-D/2+LR*D : shape==="plate" ? BX-D/2+TH : BX+D/2;
 function inAerofoil(dx,dy){
   // leading edge at BX-D/2, rotate about quarter chord; positive α = nose up
   const c=D, a=aoa*Math.PI/180, px=dx+c/2-0.25*c;
@@ -209,6 +214,7 @@ function inside(i,j){
   const dx=i-BX, dy=BY-j, R=D/2;
   if(shape==="aerofoil") return inAerofoil(dx,dy);
   if(shape==="square") return Math.abs(dx)<=R && Math.abs(dy)<=R;
+  if(shape==="plate") return dx>=-R && dx<-R+TH && Math.abs(dy)<=R;
   if(shape==="teardrop"){ const h=tdHalf((dx+R)/(LR*D)*80); if(h<0) return false; return Math.abs(dy)<=Math.max(h/10*R,0.6); }
   return dx*dx+dy*dy<=R*R;
 }
@@ -367,7 +373,7 @@ function fmtV(v){
 }
 function update(){
   const re=Re();
-  const NAMES={cylinder:["Cylinder","cylinder diameter"],square:["Square prism","side of the square"],teardrop:["Teardrop","teardrop width"],aerofoil:["NACA "+prof+", α = "+aoa+"°","aerofoil chord"]};
+  const NAMES={cylinder:["Cylinder","cylinder diameter"],square:["Square prism","side of the square"],teardrop:["Teardrop","teardrop width"],plate:["Flat plate","plate width facing the flow"],aerofoil:["NACA "+prof+", α = "+aoa+"°","aerofoil chord"]};
   $("reBig").textContent="Re = "+fmtRe(re)+"  ·  "+NAMES[shape][0];
   $("dName").textContent=NAMES[shape][1];
   $("rweLbl").textContent = shape==="aerofoil" ? "Chord (mm)" : "Body width (mm)";
@@ -394,6 +400,7 @@ document.querySelectorAll("[data-shape]").forEach(b=>b.addEventListener("click",
   shape=b.dataset.shape;
   document.querySelectorAll("[data-shape]").forEach(x=>x.setAttribute("aria-pressed",x===b));
   $("lenRow").hidden = shape!=="teardrop";
+  $("thkRow").hidden = shape!=="plate";
   $("aoaRow").hidden = shape!=="aerofoil";
   const ds=$("dSlider");
   if(shape==="aerofoil" && was!=="aerofoil"){ ds.min=24; ds.max=60; D=42; ds.value=D; $("rweSize").value=60; }
@@ -402,6 +409,7 @@ document.querySelectorAll("[data-shape]").forEach(b=>b.addEventListener("click",
 }));
 function setAoa(a){ aoa=a; $("aSlider").value=a; $("aOut").textContent=a+"°"; buildMask(); update(); }
 $("aSlider").addEventListener("input",e=>setAoa(+e.target.value));
+$("tSlider").addEventListener("input",e=>{ TH=+e.target.value; $("tOut").textContent=TH; buildMask(); update(); });
 document.querySelectorAll("[data-aoa]").forEach(b=>b.addEventListener("click",()=>setAoa(+b.dataset.aoa)));
 document.querySelectorAll("[data-prof]").forEach(b=>b.addEventListener("click",()=>{
   prof=b.dataset.prof;
